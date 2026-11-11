@@ -1,0 +1,122 @@
+require(lme4)
+source(system.file("test-tools-1.R", package = "Matrix"))# identical3() etc
+
+## use old (<=3.5.2) sample() algorithm if necessary
+if ("sample.kind" %in% names(formals(RNGkind))) {
+    suppressWarnings(RNGkind("Mersenne-Twister", "Inversion", "Rounding"))
+}
+
+## Check that quasi families throw an error
+assertError(lmer(cbind(incidence, size - incidence) ~ period + (1|herd),
+                 data = cbpp, family = quasibinomial))
+assertError(lmer(incidence ~ period + (1|herd),
+                 data = cbpp, family = quasipoisson))
+assertError(lmer(incidence ~ period + (1|herd),
+                 data = cbpp, family = quasi))
+
+## check bug found by Kevin Buhr
+set.seed(7)
+n <- 10
+X <- data.frame(y=runif(n), x=rnorm(n), z=sample(c("A","B"), n, TRUE))
+fm <- lmer(log(y) ~ x | z, data=X)  ## ignore grouping factors with
+## gave error inside  model.frame()
+stopifnot(all.equal(c(`(Intercept)` = -0.834544), fixef(fm), tolerance=.01))
+
+## is "Nelder_Mead" default optimizer?
+(isNM   <- formals(lmerControl)$optimizer == "Nelder_Mead")
+(isOldB <- formals(lmerControl)$optimizer == "bobyqa")
+(isOldTol <- environment(nloptwrap)$defaultControl$xtol_abs == 1e-6)
+
+if (.Platform$OS.type != "windows") withAutoprint({
+
+    source(system.file("testdata", "lme-tst-funs.R", package="lme4", mustWork=TRUE))# -> uc()
+
+    ## check working of Matrix methods on  vcov(.) etc ----------------------
+    fm1 <- lmer(Reaction ~ Days + (Days|Subject), sleepstudy)
+     V  <- vcov(fm)
+    (V1 <- vcov(fm1))
+    (C1 <- chol(V1))
+    dput(dV <- as.numeric(diag(V))) # 0.17607818634.. [x86_64, F Lnx 36]
+    TOL <- 0 # to show the differences below
+    TOL <- 1e-5 # for the check
+    stopifnot(exprs = {
+        all.equal(dV, uc(if(isNM)     0.176076 else if(isOldB) 0.176068575 else
+                         if(isOldTol) 0.1761714 else           0.1760782),
+                  tolerance = 9*TOL) # seen 7.8e-8; Apple clang 14.0.3 had 6.3783e-5
+        all.equal(sqrt(dV), as.numeric(chol(V)), tol = 1e-12)
+        all.equal(diag(V1), uc(`(Intercept)` = 46.5751, Days = 2.38947), tolerance = 40*TOL)# 5e-7 (for "all" algos)
+        is(C1, "dtrMatrix") # was inherits(C1, "Cholesky")
+        dim(C1) == c(2,2)
+        all.equal(as.numeric(C1), # 6.8245967  0. -0.2126263  1.5310962 [x86_64, F Lnx 36]
+                  c(6.82377, 0, -0.212575, 1.53127), tolerance=20*TOL)# 1.2e-4  ("all" algos)
+        dim(chol(crossprod(getME(fm1, "Z")))) == 36
+    })
+    ## printing
+    signif(chol(crossprod(getME(fm, "Z"))), 5) # -> simple 4 x 4 sparse
+
+    showProc.time() #
+
+    ## From: Stephane Laurent
+    ## To:   r-sig-mixed-models@..
+    ## "crash with the latest update of lme4"
+    ##
+    ## .. example for which lmer() crashes with the last update of lme4 ...{R-forge},
+    ## .. but not with version CRAN version (0.999999-0)
+    lsDat <- data.frame(
+        Operator = as.factor(rep(1:5, c(3,4,8,8,8))),
+        Part = as.factor(
+            c(2L, 3L, 5L,
+              1L, 1L, 2L, 3L,
+              1L, 1L, 2L, 2L, 3L, 3L, 4L, 5L,
+              1L, 2L, 3L, 3L, 4L, 4L, 5L, 5L,
+              1L, 2L, 2L, 3L, 3L, 4L, 5L, 5L)),
+        y =
+            c(0.34, -1.23, -2.46,
+              -0.84, -1.57,-0.31, -0.18,
+              -0.94, -0.81, 0.77, 0.4, -2.37, -2.78, 1.29, -0.95,
+              -1.58, -2.06, -3.11,-3.2, -0.1, -0.49,-2.02, -0.75,
+              1.71,  -0.85, -1.19, 0.13, 1.35, 1.92, 1.04,  1.08))
+
+    xtabs( ~ Operator + Part, data=lsDat) # --> 4 empty cells, quite a few with only one obs.:
+    ##         Part
+    ## Operator 1 2 3 4 5
+    ##        1 0 1 1 0 1
+    ##        2 2 1 1 0 0
+    ##        3 2 2 2 1 1
+    ##        4 1 1 2 2 2
+    ##        5 1 2 2 1 2
+    lsD29 <- lsDat[1:29, ]
+
+    ## FIXME: rank-Z test should probably not happen in this case:
+    (sm3 <- summary(m3 <- lm(y ~ Part*Operator, data=lsDat)))# ok: some interactions not estimable
+    stopifnot(21 == nrow(coef(sm3)))# 21 *are* estimable
+    sm4  <- summary(m4 <- lm(y ~ Part*Operator, data=lsD29))
+    stopifnot(20 == nrow(coef(sm4)))# 20 *are* estimable
+    lf <- lFormula(y ~ (1|Part) + (1|Operator) + (1|Part:Operator), data = lsDat)
+    dim(Zt <- lf$reTrms$Zt)## 31 x 31
+    c(rankMatrix(Zt)) ## 21
+    c(rankMatrix(Zt,method="qr")) ## 31 ||  29 (64 bit Lnx), then 21 (!)
+    c(rankMatrix(t(Zt),method="qr")) ## 30, then 21 !
+    nrow(lsDat)
+    fm3 <- lmer(y ~ (1|Part) + (1|Operator) + (1|Part:Operator), data = lsDat,
+                control=lmerControl(check.nobs.vs.rankZ="warningSmall"))
+
+    lf29 <- lFormula(y ~ (1|Part) + (1|Operator) + (1|Part:Operator), data = lsD29)
+    (fm4 <- update(fm3, data=lsD29))
+    fm4. <- update(fm4, REML=FALSE,
+                   control=lmerControl(optimizer="nloptwrap",
+                                       optCtrl=list(ftol_abs=1e-6,
+                                                    xtol_abs=1e-6)))
+    ## summary(fm4.)
+    stopifnot(
+        all.equal(as.numeric(formatVC(VarCorr(fm4.), digits = 7)[,"Std.Dev."]),
+                  c(1.040664, 0.6359187, 0.5291422, 0.4824796), tol = 1e-4)
+    )
+    showProc.time()
+
+}) ## skip on windows (for speed)
+
+
+cat('Time elapsed: ', proc.time(),'\n') # for ``statistical reasons''
+
+

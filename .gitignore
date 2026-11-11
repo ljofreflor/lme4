@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyd
+*.so
+*.lib
+*.pdb
+build/
+*.egg-info/
+.pytest_cache/
+pytest-cache-files-*/
+upstream/*/*.tar.gz
+upstream/*/*.tgz
+upstream/eigen_src/
+upstream/**/*.tar.gz
+upstream/**/*.tgz
