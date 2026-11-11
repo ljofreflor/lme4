@@ -106,3 +106,16 @@ def test_anova(fm1):
     assert a["Df"].iloc[1] == r["Df"]
     assert a["Pr(>Chisq)"].iloc[1] == pytest.approx(r["p"], rel=1e-3)
     np.testing.assert_allclose(a["AIC"].values, r["AIC"], rtol=1e-8)
+
+
+def test_drop1():
+    cake = load_dataset("cake")
+    m = lmer("angle ~ recipe + temperature + (1 | recipe:replicate)", cake)
+    d = m.drop1(test="Chisq")
+    r = REF["drop1"]
+    num = lambda v: np.array([np.nan if x in ("NA", None) else x for x in v], float)
+    assert list(d.index) == r["rows"]
+    np.testing.assert_allclose(d["npar"].values, num(r["npar"]), equal_nan=True)
+    np.testing.assert_allclose(d["AIC"].values, r["AIC"], rtol=1e-8)
+    np.testing.assert_allclose(d["LRT"].values, num(r["LRT"]), rtol=1e-5, atol=1e-7, equal_nan=True)
+    np.testing.assert_allclose(d["Pr(Chi)"].values, num(r["p"]), rtol=1e-4, equal_nan=True)

@@ -5,11 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lme4"
 version = "2.1.0a1"
-description = "Linear, generalized linear and nonlinear mixed-effects models: a faithful Python transcription of the R package lme4 with a C++ (Eigen) backend"
+description = "Linear, generalized linear and nonlinear mixed-effects models: a faithful, R-independent Python transcription of the R package lme4, with a C++ (Eigen) backend"
 readme = "README.md"
 license = "GPL-2.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.22", "scipy>=1.8", "pandas>=1.5", "nlopt>=2.7"]
+authors = [
+  { name = "Douglas Bates" }, { name = "Martin Maechler" }, { name = "Ben Bolker" },
+  { name = "Steven Walker" }, { name = "lme4 contributors" },
+  { name = "Leonardo Jofré Flor", email = "ljofre2146@gmail.com" },
+]
+maintainers = [{ name = "Leonardo Jofré Flor", email = "ljofre2146@gmail.com" }]
+keywords = ["mixed models", "lme4", "lmer", "glmer", "random effects", "multilevel models",
+            "hierarchical models", "GLMM", "statistics"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://github.com/ljofreflor/lme4"
+Source = "https://github.com/ljofreflor/lme4"
+Issues = "https://github.com/ljofreflor/lme4/issues"
+"Original R package" = "https://github.com/lme4/lme4"
 
 [project.optional-dependencies]
 test = ["pytest"]

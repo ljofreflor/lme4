@@ -1,4 +1,4 @@
-include README.md setup.py pyproject.toml
+include README.md LICENSE setup.py pyproject.toml
 recursive-include src/cpp *.cpp *.h
 recursive-include third_party/eigen *
 include src/lme4/_fgq_rules.json

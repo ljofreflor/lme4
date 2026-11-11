@@ -674,9 +674,10 @@ class merMod:
             return anova_single(self)
         return anova_merMod([self] + list(others), refit=refit, model_names=model_names)
 
-    def drop1(self, test="none", k=2):
+    def drop1(self, scope=None, test="none", k=2):
+        """drop1.merMod: single fixed-term deletions (refitted by ML)"""
         from .anova import drop1_merMod
-        return drop1_merMod(self, test=test, k=k)
+        return drop1_merMod(self, scope=scope, test=test, k=k)
 
     # ------------------------------------------------------------ printing
     def methTitle(self):
