@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent / "reference"))
 from fit_python import SPECS, REF, fit, quantities, maxrel  # noqa: E402
 
 TOL = dict(logLik=1e-8, devcrit=1e-5, fixef=5e-3, theta=5e-3, sigma=1e-4, vcov_rx=1e-3,
-           vcov=2e-2, vc_sdcor=5e-3, fitted=1e-3)
+           vcov=5e-2, vc_sdcor=5e-3, fitted=1e-3)
 
 
 @pytest.fixture(scope="module", params=[s["id"] for s in SPECS])

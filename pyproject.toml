@@ -30,6 +30,9 @@ pythonpath = ["src"]
 [tool.cibuildwheel]
 build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux_*"
+# NumPy 2 wheels need glibc >= 2.28
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
 test-requires = ["pytest"]
 # test against the installed wheel (override pythonpath=src from the pytest config)
 test-command = "pytest -q -p no:cacheprovider -W ignore -o pythonpath= {project}/tests/test_lmer.py {project}/tests/test_glmer.py {project}/tests/test_reference.py"
