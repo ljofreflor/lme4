@@ -26,3 +26,12 @@ lme4 = ["_fgq_rules.json", "datasets/*.csv.gz", "datasets/_factors.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = "*-win32 *-manylinux_i686 *-musllinux_*"
+test-requires = ["pytest"]
+# test against the installed wheel (override pythonpath=src from the pytest config)
+test-command = "pytest -q -p no:cacheprovider -W ignore -o pythonpath= {project}/tests/test_lmer.py {project}/tests/test_glmer.py {project}/tests/test_reference.py"
+# run the (slower) tests only on one Python version per platform
+test-skip = "cp39-* cp310-* cp311-* cp313-*"
