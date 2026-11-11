@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lme4"
-version = "2.1.0a1"
+version = "2.1.0a2"
 description = "Linear, generalized linear and nonlinear mixed-effects models: a faithful, R-independent Python transcription of the R package lme4, with a C++ (Eigen) backend"
 readme = "README.md"
 license = "GPL-2.0-or-later"
