@@ -89,15 +89,28 @@ Los argumentos de control usan `_` en vez de `.`:
 
 Requisitos: Python ≥ 3.9, numpy, scipy, pandas, nlopt, pybind11 y un compilador C++17.
 
+Con Poetry, directamente desde GitHub:
+
 ```bash
-pip install .
+poetry add git+https://github.com/ljofreflor/lme4.git#develop
 ```
 
-Sin compilador (por ejemplo, Windows sin Visual Studio):
+o con pip:
+
+```bash
+pip install git+https://github.com/ljofreflor/lme4.git@develop
+```
+
+La instalación compila el backend C++. Usa el compilador del sistema (MSVC, gcc,
+clang) y, si no hay ninguno, recurre automáticamente a Zig (paquete `ziglang`,
+que en Windows se instala como dependencia de compilación). La primera
+compilación tarda unos minutos. Para forzar Zig: `LME4_USE_ZIG=1`.
+
+Desarrollo local (compila la extensión dentro de `src/lme4`):
 
 ```bash
 pip install numpy scipy pandas nlopt pybind11 ziglang
-python tools/build_ext.py --zig      # compila src/lme4/_lme4cpp con zig c++
+python tools/build_ext.py --zig
 ```
 
 ## Fidelidad respecto de R

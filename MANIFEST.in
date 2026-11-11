@@ -1,0 +1,6 @@
+include README.md setup.py pyproject.toml
+recursive-include src/cpp *.cpp *.h
+recursive-include third_party/eigen *
+include src/lme4/_fgq_rules.json
+recursive-include src/lme4/datasets *.csv.gz *.json
+recursive-exclude * __pycache__ *.pyc *.pyd *.so *.lib *.pdb

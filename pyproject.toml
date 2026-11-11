@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "wheel", "pybind11>=2.12"]
+requires = ["setuptools>=77", "wheel", "pybind11>=2.12", "ziglang; platform_system == \"Windows\""]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,7 @@ name = "lme4"
 version = "2.1.0.dev0"
 description = "Linear, generalized linear and nonlinear mixed-effects models: a faithful Python transcription of the R package lme4 with a C++ (Eigen) backend"
 readme = "README.md"
-license = { text = "GPL-2.0-or-later" }
+license = "GPL-2.0-or-later"
 requires-python = ">=3.9"
 dependencies = ["numpy>=1.22", "scipy>=1.8", "pandas>=1.5", "nlopt>=2.7"]
 
