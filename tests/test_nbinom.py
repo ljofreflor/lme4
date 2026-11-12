@@ -126,3 +126,20 @@ def test_subset_offset():
         g = glmer_nb("TICKS ~ YEAR + (1|LOCATION)", grouseticks,
                      offset=np.zeros(len(grouseticks)))
         assert np.isfinite(g.logLik().value)
+
+
+def test_glmer_nb_singular_message_once(capfd):
+    # R's glmer.nb() runs the initial fits under suppressMessages() and records the
+    # messages of each refit (factory()), re-emitting only those of the last fit:
+    # the singular-fit message of the ?glmer.nb example appears exactly once.
+    # Data: a small deterministic set with no grouping variance.
+    rng = np.random.default_rng(1)
+    import pandas as pd
+    d = pd.DataFrame({"x": np.tile(np.arange(6.0), 20),
+                      "g": pd.Categorical(np.repeat(np.arange(10), 12).astype(str))})
+    d["y"] = rng.negative_binomial(0.8, 0.8 / (0.8 + np.exp(1 + 0.2 * d["x"])))
+    capfd.readouterr()
+    m = glmer_nb("y ~ x + (1|g)", data=d)
+    err = capfd.readouterr().err
+    assert m.isSingular()
+    assert err.count("boundary (singular) fit") == 1

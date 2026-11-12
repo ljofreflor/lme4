@@ -190,18 +190,28 @@ Implemented: `lmer`, `glmer` (Laplace, `nAGQ = 0`, adaptive Gauss–Hermite quad
 user-supplied models), `glmer.nb`; structured covariances `us`, `diag`, `cs`, `ar1`;
 the modular interface (`lFormula`, `mkLmerDevfun`, `optimizeLmer`, `glFormula`,
 `mkGlmerDevfun`, …); `summary`, `VarCorr`, `ranef` with conditional variances, `coef`,
-`vcov`, `predict`, `simulate`, `profile`, `confint` (profile, Wald, bootstrap), `bootMer`,
-`refit`, `refitML`, `update`, `anova`, `drop1`, `getME`, `hatvalues`, `lmList`, `allFit`,
-`influence`, Cook's distance; the datasets shipped with lme4.
+`vcov`, `predict` (including `se.fit`), `simulate` (also from a formula, for power
+analysis), `profile`, `confint` (profile, Wald, bootstrap), `bootMer`, `refit`, `refitML`,
+`update`, `anova`, `drop1`, `getME`, `hatvalues`, `isNested`, `rePCA`, `lmList`, `allFit`,
+`influence`, Cook's distance; diagnostic and profile plots with matplotlib (`plot`,
+`qqmath`, `dotplot` of random effects, profile `xyplot`/`densityplot`/`splom`;
+`pip install "lme4[plots]"`); the datasets shipped with lme4.
 
-Not (yet) implemented: plotting methods, `predict(se.fit = TRUE)`, `simulate()` from a formula
-without a fitted model, user-defined GLM families. `nlminbwrap` uses SciPy's L-BFGS-B, since
-R's PORT library is not available.
+Not (yet) implemented: user-defined GLM families. `nlminbwrap` uses SciPy's L-BFGS-B, since
+R's PORT library is not available. Plots reproduce lattice's content, not its styling.
 
 Known deliberate differences: random numbers come from NumPy, so simulations and bootstrap
 samples do not reproduce R's streams; factor levels created from strings are sorted by code
 point (R sorts by locale; pandas categoricals keep their own order); R's `profile()` modifies
 the fitted model in place, this implementation does not.
+
+## Examples
+
+The [`examples/`](examples) folder contains notebooks that reproduce, with pandas, the
+examples of lme4's documentation and vignettes and well-known tutorials: linear mixed
+models, crossed and nested effects, binomial and count GLMMs, nonlinear models, prediction
+and simulation, inference, structured covariances and diagnostics. Every notebook checks its
+numbers against R and is executed in CI.
 
 ## Development
 

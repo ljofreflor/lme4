@@ -18,15 +18,20 @@ from .lmer import lmer, glmer
 from .nlmer import nlmer
 from .profile import profile_merMod, confint_merMod
 from .bootmer import bootMer
+from .predict import simulate_formula
 from .nbinom import glmer_nb
 from .lmlist import lmList
 from .allfit import allFit
+from .repca import rePCA
 from .influence import influence, cooks_distance, rstudent, rstandard, dfbeta, dfbetas
 from .modular import (lFormula, glFormula, mkLmerDevfun, optimizeLmer, mkGlmerDevfun,
                       optimizeGlmer, updateGlmerDevfun)
 from .lmer import mkMerMod
+# load the submodule lme4/anova.py now: importing it later (drop1) would rebind
+# the package attribute 'anova' to the module, shadowing the anova() function below
+from . import anova as _anova_module  # noqa: F401
 from .mermod import merMod, lmerMod, glmerMod, nlmerMod
-from .reformulas import findbars, nobars, subbars, expandDoubleVerts, mkReTrms
+from .reformulas import findbars, nobars, subbars, expandDoubleVerts, mkReTrms, isNested
 from .optimizers import Nelder_Mead, bobyqa, nloptwrap, GHrule
 from .datasets import load_dataset, list_datasets
 from . import options

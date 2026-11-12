@@ -232,3 +232,32 @@ def test_crossed_partial_reform():
     s = simulate_merMod(fm, nsim=2000, seed=4, re_form="~(1|plate)")
     np.testing.assert_allclose(s.mean(axis=1).values, fm.predict(re_form="~(1|plate)").values,
                                atol=0.15)
+
+
+# ------------------------------------------------------------------ simulate.formula
+def test_simulate_formula_lmm():
+    from lme4 import simulate_formula
+    d = pd.DataFrame({"x": np.tile(np.arange(5.0), 200),
+                      "g": pd.Categorical(np.repeat(np.arange(200), 5).astype(str))})
+    s = simulate_formula("~ x + (1|g)", nsim=3, seed=1, newdata=d,
+                         newparams=dict(beta=[1.0, 2.0], theta=[2.0], sigma=0.5))
+    assert s.shape == (1000, 3)
+    resid = s["sim_1"].values - (1 + 2 * d["x"].values)
+    # marginal variance (theta*sigma)^2 + sigma^2 = 1 + 0.25
+    assert abs(resid.var() - 1.25) < 0.25
+    with pytest.raises(ValueError, match="must specify sigma"):
+        simulate_formula("~ x + (1|g)", newdata=d, newparams=dict(beta=[1.0, 2.0], theta=[1.0]))
+    with pytest.raises(ValueError, match="newparams"):
+        simulate_formula("~ x + (1|g)", newdata=d)
+
+
+def test_simulate_formula_glmm_refit():
+    from lme4 import simulate_formula
+    d = pd.DataFrame({"x": np.tile(np.linspace(-1, 1, 10), 60),
+                      "g": pd.Categorical(np.repeat(np.arange(60), 10).astype(str))})
+    s = simulate_formula("~ x + (1|g)", nsim=1, seed=3, newdata=d, family=binomial,
+                         newparams=dict(beta=[-0.5, 1.0], theta=[0.5]))
+    y = s["sim_1"].values
+    assert set(np.unique(y)) <= {0.0, 1.0}
+    fit = glmer("y ~ x + (1|g)", d.assign(y=y), family=binomial)
+    assert abs(fit.fixef()["x"] - 1.0) < 0.6

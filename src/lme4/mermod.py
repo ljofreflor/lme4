@@ -674,10 +674,22 @@ class merMod:
             return anova_single(self)
         return anova_merMod([self] + list(others), refit=refit, model_names=model_names)
 
-    def drop1(self, scope=None, test="none", k=2):
-        """drop1.merMod: single fixed-term deletions (refitted by ML)"""
+    def drop1(self, scope=None, test="none", k=2, sumFun=None, **kwargs):
+        """drop1.merMod: single fixed-term deletions (refitted by ML);
+        test "none", "Chisq" or "user" (with ``sumFun``)"""
         from .anova import drop1_merMod
-        return drop1_merMod(self, scope=scope, test=test, k=k)
+        return drop1_merMod(self, scope=scope, test=test, k=k, sumFun=sumFun, **kwargs)
+
+    # ------------------------------------------------------------ plots (plot.R; needs matplotlib)
+    def plot(self, form=None, **kw):
+        """plot.merMod: diagnostic plot (default: Pearson residuals vs fitted values)"""
+        from .plots import plot_merMod
+        return plot_merMod(self, form, **kw)
+
+    def qqmath(self, **kw):
+        """qqmath.merMod: normal QQ plot of the standardized residuals"""
+        from .plots import qqmath_merMod
+        return qqmath_merMod(self, **kw)
 
     # ------------------------------------------------------------ printing
     def methTitle(self):
@@ -778,6 +790,16 @@ class LogLik:
 
 class RanefMer(dict):
     """result of ranef(): dict of DataFrames"""
+
+    def dotplot(self, **kw):
+        """dotplot.ranef.mer: caterpillar plots (dict name -> matplotlib Figure)"""
+        from .plots import dotplot_ranef
+        return dotplot_ranef(self, **kw)
+
+    def qqmath(self, **kw):
+        """qqmath.ranef.mer: normal QQ plots of the conditional modes"""
+        from .plots import qqmath_ranef
+        return qqmath_ranef(self, **kw)
 
     def as_data_frame(self):
         rows = []

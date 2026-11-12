@@ -14,3 +14,4 @@ upstream/*/*.tgz
 upstream/eigen_src/
 upstream/**/*.tar.gz
 upstream/**/*.tgz
+Rplots.pdf

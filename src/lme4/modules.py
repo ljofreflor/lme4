@@ -113,6 +113,10 @@ class lmerResp(_RespBase):
         n = len(y)
         weights = np.ones(n) if weights is None else np.asarray(weights, float)
         offset = np.zeros(n) if offset is None else np.asarray(offset, float)
+        if n == 0:
+            # trivial response (simulate() from a formula): R recycles the length-0 'y'
+            # and never creates the external pointer; the C++ module needs equal lengths
+            weights, offset = np.ones(0), np.zeros(0)
         mu = np.zeros(n) if mu is None else np.asarray(mu, float)
         sqrtXwt = np.sqrt(weights)
         sqrtrwt = np.sqrt(weights)
@@ -146,6 +150,9 @@ class glmResp(_RespBase):
         nobs = len(y)
         weights = np.ones(nobs) if weights is None else np.asarray(weights, float)
         offset = np.zeros(nobs) if offset is None else np.asarray(offset, float)
+        if nobs == 0:
+            # trivial response (simulate() from a formula); see lmerResp
+            weights, offset = np.ones(0), np.zeros(0)
         mu = np.zeros(nobs) if mu is None else np.asarray(mu, float)
         sqrtXwt = np.sqrt(weights)
         sqrtrwt = np.sqrt(weights)

@@ -10,7 +10,9 @@
 """
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
 import math
 import sys
 import warnings
@@ -342,10 +344,13 @@ def optTheta(object, interval=(-5, 5), tol=DBL_EPSILON ** 0.25, verbose=False, c
     def NBfun(t):
         # Kluge to retain last value and evaluation count  (lme4's factory():
         # warnings are recorded with the fit, not signalled)
-        with warnings.catch_warnings(record=True) as wl:
+        # messages (R's message(), printed to stderr here) are captured too
+        mbuf = io.StringIO()
+        with warnings.catch_warnings(record=True) as wl, contextlib.redirect_stderr(mbuf):
             warnings.simplefilter("always")
             state["lastfit"] = refitNB(state["lastfit"], theta=math.exp(t), control=control)
         state["wlist"] = list(wl)
+        state["mlist"] = mbuf.getvalue()
         lastfit = state["lastfit"]
         dev = -2 * lastfit.logLik().value
         state["it"] += 1
@@ -366,7 +371,20 @@ def optTheta(object, interval=(-5, 5), tol=DBL_EPSILON ** 0.25, verbose=False, c
     # output warnings/messages from last fit
     for w in state["wlist"]:
         warnings.warn_explicit(w.message, w.category, w.filename, w.lineno)
+    if state.get("mlist"):
+        print(state["mlist"], end="", file=sys.stderr)
     return lastfit
+
+
+@contextlib.contextmanager
+def _suppressMessages():
+    """R's ``suppressMessages()``: discard messages (printed to stderr by this
+    package), but let warnings through."""
+    with warnings.catch_warnings(record=True) as wl:
+        with contextlib.redirect_stderr(io.StringIO()):
+            yield
+    for w in wl:
+        warnings.warn_explicit(w.message, w.category, w.filename, w.lineno)
 
 
 def _all_equal(target, current, tolerance=1.5e-8):
@@ -415,7 +433,7 @@ def glmer_nb(formula, data=None, *args, interval=None, tol=5e-5, verbose=False,
     user_control = kwargs.get("control")
     th = initCtrl.get("theta")
     if th is None:
-        with warnings.catch_warnings():
+        with _suppressMessages():
             g0 = glmer(formula, data, *args, family=poisson(), verbose=gverbose,
                        _env=env, **kwargs)
         th = est_theta(g0, limit=initCtrl["limit"], eps=initCtrl["eps"],
@@ -425,8 +443,9 @@ def glmer_nb(formula, data=None, *args, interval=None, tol=5e-5, verbose=False,
     th = float(th)
     if interval is None:
         interval = (math.log(th) - 3, math.log(th) + 3)
-    g1 = glmer(formula, data, *args, family=negative_binomial(theta=th), verbose=gverbose,
-               _env=env, **kwargs)
+    with _suppressMessages():
+        g1 = glmer(formula, data, *args, family=negative_binomial(theta=th), verbose=gverbose,
+                   _env=env, **kwargs)
     if verbose:
         print(" --> dev.= -2*logLik(.) =", format(-2 * g1.logLik().value, ".7g"))
     # fix the call: 'verbose' / 'control' as given by the user

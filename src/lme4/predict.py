@@ -532,7 +532,9 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
     """Predictions from a merMod object (predict.merMod).
 
     Returns a :class:`pandas.Series` named by the rows of ``newdata`` (or of the
-    model frame)."""
+    model frame); with ``se_fit=True`` a dict ``{"fit": Series, "se.fit": Series}``
+    (R's ``list(fit, se.fit)``), the standard errors computed from the joint
+    covariance matrix of the conditional modes and fixed effects (``vcov_full``)."""
     for k in ("ReForm", "REForm", "REform"):
         if k in kw:
             raise ValueError("synonyms 'ReForm', 'REForm', 'REform' are deprecated: please use "
@@ -543,8 +545,6 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
         raise ValueError("'arg' should be one of \"link\", \"response\"")
     if terms is not None:
         raise NotImplementedError("terms functionality for predict not yet implemented")
-    if se_fit:
-        raise NotImplementedError("se.fit is not implemented")
     na_missing = na_action is _MISSING
     if na_missing:
         na_action = "na.pass"
@@ -552,6 +552,7 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
     if newparams is not None:
         object = setParams(object, newparams)
     newdata = _as_dataframe(newdata)
+    X = newRE = eta = None
     if newdata is None and re_form is None and newparams is None and not random_only:
         rn = object.frame.row_names
         if object.isLMM() or object.isNLMM():
@@ -560,6 +561,7 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
             pred, index = pred[ok], rn[ok]
         else:
             pred = np.asarray(object.resp.mu if type == "response" else object.resp.eta, float)
+            eta = np.asarray(object.resp.eta, float)
             index = rn
         fit_na_action = None
     else:
@@ -596,6 +598,7 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
             if random_only:
                 fit_na_action = newRE["na.action"]
         if object.isGLMM() and type == "response":
+            eta = pred
             pred = object.resp.family.linkinv(pred)
     if newdata is None:
         fit_na_action = object.frame.attrs.get("na.action")
@@ -604,7 +607,121 @@ def predict_merMod(object, newdata=None, newparams=None, re_form=None, random_on
     pred, index = _napredict(fit_na_action, np.asarray(pred, float), index)
     if index is None or len(index) != len(pred):
         index = np.arange(1, len(pred) + 1)
-    return pd.Series(np.asarray(pred, float), index=index)
+    pred = pd.Series(np.asarray(pred, float), index=index)
+    if not se_fit:
+        return pred
+    return _predict_se_fit(object, pred, newdata, re_form, random_only, type, X, newRE, eta,
+                           allow_new_levels)
+
+
+def quad_tdiag(M, x):
+    """diag(x %*% M %*% t(x)) (lme4's quad.tdiag)"""
+    x = x.toarray() if sp.issparse(x) else np.asarray(x, float)
+    return ((x @ np.asarray(M, float).T) * x).sum(axis=1)
+
+
+def zero_padding(mat, mat_names, insert_after, n_add=1):
+    """insert ``n_add`` zero rows/columns after position ``insert_after`` (utilities.R)"""
+    mat = np.asarray(mat, float)
+    old_dim = mat.shape[0]
+    new_dim = old_dim + n_add
+    m_pad = np.zeros((new_dim, new_dim))
+    a, b = insert_after, insert_after + n_add
+    m_pad[:a, :a] = mat[:a, :a]
+    m_pad[:a, b:] = mat[:a, a:]
+    m_pad[b:, :a] = mat[a:, :a]
+    m_pad[b:, b:] = mat[a:, a:]
+    return pd.DataFrame(m_pad, index=list(mat_names), columns=list(mat_names))
+
+
+def _cnms_get(cnms, grp):
+    """R's ``cnms[[grp]]`` (first match) for cnms given as a list of (group, names)"""
+    for g, cn in cnms:
+        if g == grp:
+            return list(cn)
+    return None
+
+
+def pad_Cmat(Cmat, C_factors, Z_factors, Cmat_names, cnms):
+    """if allow.new.levels = TRUE, pad Cmat with zeros for the new levels (utilities.R).
+
+    ``C_factors``/``Z_factors``: dicts grouping-factor name -> list of levels."""
+    C_factors = {k: list(v) for k, v in C_factors.items()}
+    Cmat_names = list(Cmat_names)
+    n_padded = 0
+    for grp in [g for g in C_factors if g in Z_factors]:
+        n_lvl = len(C_factors[grp])
+        cset = set(C_factors[grp])
+        added_levels = [lv for lv in dict.fromkeys(Z_factors[grp]) if lv not in cset]
+        n_add = len(added_levels)
+        if n_add == 0:
+            continue
+        C_factors[grp] = C_factors[grp] + added_levels
+        cn = _cnms_get(cnms, grp)
+        added_nms = [f"{grp}.{lv}.{c}" for lv in added_levels for c in cn]
+        n_padded = n_padded + n_lvl * len(cn)
+        n_new = n_add * len(cn)
+        Cmat_names = Cmat_names[:n_padded] + added_nms + Cmat_names[n_padded:]
+        Cmat = zero_padding(Cmat, Cmat_names, insert_after=n_padded, n_add=n_new)
+        n_padded = n_padded + n_new
+    return {"Cmat": Cmat, "C_factors": C_factors, "Cmat_names": Cmat_names}
+
+
+def _predict_se_fit(object, pred, newdata, re_form, random_only, type, X, newRE, eta,
+                    allow_new_levels):
+    """the ``se.fit`` branch of predict.merMod"""
+    if not object.isLMM():
+        warnings.warn("se.fit computation uses an approximation to estimate the sampling "
+                      "distribution of the parameters")
+    Cmat = object.vcov_full()
+    n_u = len(np.asarray(object.getME("u")))
+    n_beta = len(np.asarray(object.beta))
+    if newdata is None:
+        X = np.asarray(object.getME("X"), float)
+        if re_form is None:
+            Z = sp.csc_matrix(object.getME("Z"))
+        elif isRE(re_form):
+            Z = sp.csc_matrix(newRE["Zt"]).T
+        else:
+            Z = sp.csc_matrix((X.shape[0], n_u))
+    elif isRE(re_form):
+        Z = sp.csc_matrix(newRE["Zt"]).T
+    else:
+        Z = sp.csc_matrix((X.shape[0], n_u))
+    if random_only:
+        X = np.zeros((Z.shape[0], n_beta))
+    ZX = sp.hstack([Z, sp.csc_matrix(np.asarray(X, float))]).tocsr()
+    Cmat_names = list(Cmat.index)
+    Cm = np.asarray(Cmat, float)
+    if ZX.shape[1] != Cm.shape[0]:
+        # subsetting Cmat (the case where newRE is used)
+        Z_factors = {k: list(f.levels) for k, f in newRE["flist"].items()}
+        C_factors = {k: list(f.levels) for k, f in object.flist.items()}
+        cnms = object.cnms
+        fix_nms = list(object.colnames_X)
+        if allow_new_levels:   # Cmat is padded with zeros for new levels
+            mod = pad_Cmat(Cmat, C_factors, Z_factors, Cmat_names, cnms)
+            Cm = np.asarray(mod["Cmat"], float)
+            Cmat_names = mod["Cmat_names"]
+            C_factors = mod["C_factors"]
+        fset = set(fix_nms)
+        is_group_term = np.array([nm not in fset for nm in Cmat_names])
+        keep_idx = ~is_group_term
+        mask = []
+        for grp in [g for g in C_factors if g in Z_factors]:
+            zset = set(Z_factors[grp])
+            nc = len(_cnms_get(cnms, grp))
+            for lev in C_factors[grp]:
+                mask += [lev in zset] * nc
+        mask = np.asarray(mask, bool)
+        keep_idx[:len(mask)] = is_group_term[:len(mask)] & mask
+        Cm = Cm[np.ix_(keep_idx, keep_idx)]
+    se = np.sqrt(quad_tdiag(Cm, ZX))
+    if object.isGLMM() and type == "response":
+        # eta (the linear predictor) was stored previously in this case
+        se = se * np.abs(object.resp.family.mu_eta(np.asarray(eta, float)))
+    se = pd.Series(se, index=pred.index) if len(se) == len(pred) else pd.Series(se)
+    return {"fit": pred, "se.fit": se}
 
 
 # ---------------------------------------------------------------------------
@@ -846,3 +963,56 @@ def simulate_merMod(object, nsim=1, seed=None, use_u=_MISSING, re_form=_MISSING,
     out.attrs["na.action"] = fit_na_action
     out.attrs["seed"] = RNGstate
     return out
+
+
+# ---------------------------------------------------------------------------
+# simulate.formula (simulate.formula.R) / the 'object missing' path of .simulateFun
+# ---------------------------------------------------------------------------
+
+def simulate_formula(formula, nsim=1, seed=None, family=None, newdata=None, newparams=None,
+                     weights=None, offset=None, _env=None, **kw):
+    """Simulate from a mixed model specified by a formula, data and parameters, without a
+    fitted model (R's ``simulate(~ ..., newdata=, newparams=, family=)``).
+
+    ``formula`` may be one-sided (``"~ x + (1|g)"``) or two-sided (the LHS, if present,
+    must be evaluable in ``newdata``; it is not used for simulation).  ``newparams`` is a
+    dict with ``beta``, ``theta`` (or ``par``) and, for families with a scale parameter,
+    ``sigma``.  Further arguments (``use_u``, ``re_form``, ``cond_sim``, ...) are passed
+    to :func:`simulate_merMod`.  Returns the same structure as :func:`simulate_merMod`."""
+    from .control import lmerControl, glmerControl
+    from .family import get_family
+    from .lmer import mkMerMod, _caller_env, Call as _MerCall
+    from .modular import lFormula, glFormula, mkLmerDevfun, mkGlmerDevfun
+    from .optimizers import OptResult
+    from .symbolic import to_formula
+    env = _env if _env is not None else _caller_env()
+    formula = to_formula(formula, env)
+    newdata = _as_dataframe(newdata)
+    if newdata is None or newparams is None:
+        raise ValueError("if 'object' is missing, must specify all of 'formula', 'newdata', "
+                         "and 'newparams'")
+    if weights is None:
+        weights = np.ones(len(newdata))
+    if offset is None:
+        offset = np.zeros(len(newdata))
+    if family is not None:
+        family = get_family(family)
+    opt = OptResult(par=np.array([np.nan]), fval=np.nan, conv=np.nan, message="")
+    if family is None or family.is_gaussian_identity():
+        lmod = lFormula(formula, newdata, weights=weights, offset=offset,
+                        control=lmerControl(check_formula_LHS="ignore"))
+        devfun = mkLmerDevfun(lmod["fr"], lmod["X"], lmod["reTrms"], Xattrs=lmod["Xattrs"])
+        mod = lmod
+        call = _MerCall("lmer", formula=lmod["formula"], data=None, _data=newdata)
+    else:
+        glmod = glFormula(formula, newdata, family=family, weights=weights, offset=offset,
+                          control=glmerControl(check_formula_LHS="ignore"))
+        devfun = mkGlmerDevfun(glmod["fr"], glmod["X"], glmod["reTrms"], family,
+                               Xattrs=glmod["Xattrs"])
+        mod = glmod
+        call = _MerCall("glmer", formula=glmod["formula"], data=None, family=family,
+                    _data=newdata)
+    object = mkMerMod(devfun.rho, opt, mod["reTrms"], fr=mod["fr"], mc=call)
+    object = setParams(object, newparams, requireSigma=True)
+    return simulate_merMod(object, nsim=nsim, seed=seed, newdata=newdata, weights=weights,
+                           offset=offset, **kw)

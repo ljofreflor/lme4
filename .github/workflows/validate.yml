@@ -1,0 +1,41 @@
+name: validate
+
+# Builds the validation image (R 4.6.2 + lme4 2.1.0, and lme4 for Python installed
+# from this commit), regenerates nothing by default, and executes the example
+# notebooks and the test suite against the installed package.
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "all | refs | notebooks | tests"
+        default: "all"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tools/validate/Dockerfile
+          tags: lme4-validate
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: notebooks
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.what == 'all' || inputs.what == 'notebooks' }}
+        run: docker run --rm -v "$PWD:/work" lme4-validate notebooks
+      - name: tests
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.what == 'all' || inputs.what == 'tests' }}
+        run: docker run --rm -v "$PWD:/work" lme4-validate tests
+      - name: regenerate R references and check they are unchanged
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.what == 'all' || inputs.what == 'refs') }}
+        run: |
+          docker run --rm -v "$PWD:/work" lme4-validate refs
+          git diff --stat

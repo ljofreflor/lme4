@@ -37,7 +37,8 @@ Issues = "https://github.com/ljofreflor/lme4/issues"
 "Original R package" = "https://github.com/lme4/lme4"
 
 [project.optional-dependencies]
-test = ["pytest"]
+plots = ["matplotlib>=3.5"]
+test = ["pytest", "matplotlib>=3.5", "nbformat", "nbclient", "ipykernel"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

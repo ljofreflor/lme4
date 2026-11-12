@@ -374,6 +374,30 @@ def makeFac(x, char_only=False):
     return x
 
 
+def isNested(f1, f2):
+    """Is factor ``f1`` nested within factor ``f2``?  (reformulas::isNested)
+
+    TRUE if every level of ``f1`` occurs in conjunction with exactly one level of ``f2``.
+    R builds the pattern matrix (levels(f2) x levels(f1)) and checks that no column has
+    more than one non-zero; here the same count is made on the distinct (f1, f2) code pairs.
+    Accepts pandas Series/Categoricals, arrays or Factors.
+    """
+    def _fac(x):
+        if isinstance(x, Factor):
+            return x
+        if hasattr(x, "cat"):            # pandas categorical Series: keep its levels
+            x = x.values
+        return as_factor(x)
+    f1, f2 = _fac(f1), _fac(f2)
+    if len(f1) != len(f2):
+        raise ValueError("length(f1) == length(f2) is not TRUE")
+    k = f1.nlevels
+    pairs = np.unique(np.column_stack([f1.codes, f2.codes]), axis=0)
+    pairs = pairs[(pairs[:, 0] >= 0) & (pairs[:, 1] >= 0)]
+    counts = np.bincount(pairs[:, 0], minlength=k)
+    return bool(np.all(counts <= 1))
+
+
 def mkBlist(x, frloc: ModelFrame, drop_unused_levels=True, env=None, extra=None):
     import copy
     fr2 = ModelFrame(dict(frloc.columns), frloc.terms, frloc.row_names, frloc.attrs)

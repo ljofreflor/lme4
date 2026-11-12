@@ -155,38 +155,56 @@ def interpSpline(x, y, xname="x", yname="y"):
 
 
 def backSpline(sp):
-    """splines::backSpline: the inverse of a monotone spline, as a piecewise
-    cubic Hermite interpolant through (y_i, x_i) with slopes 1/f'(x_i).
-    Only the values at the knots are checked for monotonicity."""
+    """splines::backSpline (backSpline.npolySpline): the inverse of a monotone
+    cubic spline.  Interior intervals are cubic Hermite pieces through
+    (y_i, x_i) with slopes 1/f'(x_i); the first and last intervals are
+    quadratic (natural-spline ends), with the curvature clipped to zero if it
+    has the wrong sign.  Only the values at the knots are checked for
+    monotonicity."""
     if not isinstance(sp, polySpline):
         raise SplineError("backSpline() needs a spline")
     knots = sp.knots
     nk = len(knots)
-    if np.any(np.diff(knots) <= 0):
+    nkm1 = nk - 1
+    kdiff = np.diff(knots)
+    if np.any(kdiff <= 0):
         raise SplineError("knot positions must be strictly increasing")
     coeff = sp.coefficients
+    if coeff.shape[1] != 4:
+        raise SplineError("currently implemented only for cubic splines")
     bknots = coeff[:, 0]
     adiff = np.diff(bknots)
     if np.all(adiff < 0):
-        o = np.arange(nk)[::-1]
+        revKnots = True
     elif np.all(adiff > 0):
-        o = np.arange(nk)
+        revKnots = False
     else:
         raise SplineError("spline must be monotone")
-    yk = bknots[o]          # new knots (increasing)
-    xk = knots[o]
+    bcoeff = np.zeros(coeff.shape)
+    bcoeff[:, 0] = knots
     with np.errstate(divide="ignore"):
-        sl = 1.0 / coeff[o, 1]
-    bcoeff = np.zeros((nk, 4))
-    bcoeff[:, 0] = xk
-    bcoeff[:, 1] = sl
-    ad = np.diff(yk)
-    kd = np.diff(xk)
-    for i in range(nk - 1):
-        a = np.array([[ad[i] ** 2, ad[i] ** 3], [2 * ad[i], 3 * ad[i] ** 2]])
-        b = np.array([kd[i] - ad[i] * sl[i], sl[i + 1] - sl[i]])
+        bcoeff[:, 1] = 1.0 / coeff[:, 1]
+    for i in range(nkm1):
+        a = np.array([[adiff[i] ** 2, adiff[i] ** 3], [2 * adiff[i], 3 * adiff[i] ** 2]])
+        b = np.array([kdiff[i] - adiff[i] * bcoeff[i, 1], bcoeff[i + 1, 1] - bcoeff[i, 1]])
         bcoeff[i, 2:4] = np.linalg.solve(a, b)
-    return polySpline(yk, bcoeff, xname=sp.yname, yname=sp.xname, natural=False)
+    bcoeff[nk - 1, 1:4] = np.nan
+    if nk > 2:
+        bcoeff[0, 3] = bcoeff[nkm1 - 1, 3] = 0.0
+        bcoeff[0, 1:3] = np.linalg.solve(np.array([[adiff[0], adiff[0] ** 2], [1.0, 2 * adiff[0]]]),
+                                         np.array([kdiff[0], 1.0 / coeff[1, 1]]))
+        bcoeff[nkm1 - 1, 2] = ((kdiff[nkm1 - 1] - adiff[nkm1 - 1] * bcoeff[nkm1 - 1, 1])
+                               / adiff[nkm1 - 1] ** 2)
+    if bcoeff[0, 2] > 0:
+        bcoeff[0, 2] = 0.0
+        bcoeff[0, 1] = kdiff[0] / adiff[0]
+    if bcoeff[nkm1 - 1, 2] < 0:
+        bcoeff[nkm1 - 1, 2] = 0.0
+        bcoeff[nkm1 - 1, 1] = kdiff[nkm1 - 1] / adiff[nkm1 - 1]
+    if revKnots:
+        bknots = bknots[::-1]
+        bcoeff = bcoeff[::-1].copy()
+    return polySpline(bknots, bcoeff, xname=sp.yname, yname=sp.xname, natural=False)
 
 
 def predy(sp, vv):
@@ -519,6 +537,22 @@ class thpr:
 
     def varianceProf(self, ranef=True):
         return varianceProf(self, ranef=ranef)
+
+    # lattice methods (matplotlib versions in lme4.plots_profile)
+    def xyplot(self, **kw):
+        """xyplot.thpr: profile zeta plots"""
+        from .plots_profile import xyplot_thpr
+        return xyplot_thpr(self, **kw)
+
+    def densityplot(self, **kw):
+        """densityplot.thpr: densities implied by the profiles"""
+        from .plots_profile import densityplot_thpr
+        return densityplot_thpr(self, **kw)
+
+    def splom(self, **kw):
+        """splom.thpr: profile pairs plot"""
+        from .plots_profile import splom_thpr
+        return splom_thpr(self, **kw)
 
 
 def _format_perc(a, digits=3):

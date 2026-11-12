@@ -364,3 +364,60 @@ def test_mkNewReTrms_shapes(fm2, sleepstudy):
     assert r["Zt"].shape == fm2.getME("Zt").shape
     assert np.allclose(r["b"], fm2.getME("b"))
     assert np.allclose(r["Lambdat"].toarray(), fm2.getME("Lambdat").toarray())
+
+
+# ------------------------------------------------------------------ se.fit
+# reference values: R 4.6.2 / lme4 2.1.0 (examples/r/06_prediction_and_simulation.R)
+def test_se_fit_lmm(fm2):
+    from lme4.predict import quad_tdiag
+    r = fm2.predict(se_fit=True)
+    assert set(r) == {"fit", "se.fit"}
+    assert np.allclose(r["fit"].values, fm2.fitted().values)
+    assert np.allclose(r["se.fit"].values[:6], [12.2548108256166, 10.5433848237068,
+                       9.11383151932835, 8.11648154297436, 7.72068692313019,
+                       8.01605431277466], rtol=1e-6)
+    pop = pd.DataFrame({"Days": np.arange(10.0)})
+    p = fm2.predict(newdata=pop, re_form="NA", se_fit=True)
+    assert np.allclose(p["se.fit"].values[[0, 5, 9]], [6.8245966949549, 9.58127739200983,
+                       14.6288155374647], rtol=1e-6)
+    X = np.column_stack([np.ones(10), np.arange(10.0)])
+    assert np.allclose(p["se.fit"].values ** 2, quad_tdiag(fm2.vcov().values, X))
+    # subset of levels (Cmat subsetting) and a new level (pad_Cmat)
+    nd = pd.DataFrame({"Days": [0.0, 5, 9, 0, 5, 9],
+                       "Subject": pd.Categorical(["308"] * 3 + ["new"] * 3)})
+    p = fm2.predict(newdata=nd, allow_new_levels=True, se_fit=True)
+    assert np.allclose(p["fit"].values, [253.663655798386, 351.994964424196, 430.660011324843,
+                                         251.405104848485, 303.741534646465, 345.610678484849],
+                       rtol=1e-6)
+    assert np.allclose(p["se.fit"].values, [12.2548108256166, 8.01605431277466, 13.8568925085997,
+                                            6.8245966949549, 9.58127739200983, 14.6288155374647],
+                       rtol=1e-6)
+
+
+def test_se_fit_partial_reform(fm3):
+    se = fm3.predict(re_form="~(1|plate)", se_fit=True)["se.fit"].values
+    assert len(se) == 144
+    assert np.allclose(se, 0.817976123319972, rtol=1e-4)   # theta agrees with R to ~1e-5
+
+
+def test_se_fit_glmm(gm1):
+    pp = pd.DataFrame({"period": pd.Categorical(["1", "2", "3", "4"])})
+    with pytest.warns(UserWarning, match="approximation"):
+        pl = gm1.predict(newdata=pp, re_form="NA", se_fit=True)
+    with pytest.warns(UserWarning):
+        pr = gm1.predict(newdata=pp, re_form="NA", type="response", se_fit=True)
+    assert np.allclose(pl["se.fit"].values, [0.227892641940324, 0.310303375240942,
+                                             0.330776779572552, 0.432643895881694], rtol=1e-5)
+    assert np.allclose(pr["se.fit"].values, [0.0361952057965772, 0.0238432560358867,
+                                             0.0226586745261182, 0.0199228228834064], rtol=1e-5)
+
+
+def test_pad_Cmat():
+    from lme4.predict import pad_Cmat
+    C = pd.DataFrame(np.arange(9.0).reshape(3, 3), index=["g.a.(Intercept)", "g.b.(Intercept)", "x"],
+                     columns=["g.a.(Intercept)", "g.b.(Intercept)", "x"])
+    r = pad_Cmat(C, {"g": ["a", "b"]}, {"g": ["a", "z"]}, list(C.index), [("g", ["(Intercept)"])])
+    assert r["Cmat_names"] == ["g.a.(Intercept)", "g.b.(Intercept)", "g.z.(Intercept)", "x"]
+    M = np.asarray(r["Cmat"])
+    assert np.all(M[2] == 0) and np.all(M[:, 2] == 0) and M[3, 3] == 8 and M[0, 3] == 2
+    assert r["C_factors"]["g"] == ["a", "b", "z"]
