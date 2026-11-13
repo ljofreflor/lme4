@@ -36,7 +36,7 @@ from .optimizers import Nelder_Mead, bobyqa, nloptwrap, GHrule
 from .datasets import load_dataset, list_datasets
 from . import options
 
-__version__ = "2.1.0a2"   # tracks lme4 2.1-0
+__version__ = "2.1.0a3"   # tracks lme4 2.1-0
 
 
 def fixef(m, **kw): return m.fixef(**kw)
