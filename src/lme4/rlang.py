@@ -450,6 +450,17 @@ class Formula:
         self.expr = expr
         self.env = env if env is not None else {}
 
+    # Pickling.  R serializes a formula's environment; in Python the
+    # environment is typically the caller's globals(), with modules and other
+    # unpicklable objects.  Keep only the entries the formula refers to (by
+    # name) that can be pickled; everything else is looked up in the data.
+    def __getstate__(self):
+        return {"expr": self.expr, "env": prune_env(self.env, self.expr)}
+
+    def __setstate__(self, st):
+        self.expr = st["expr"]
+        self.env = st["env"]
+
     # formula[[2]] etc.
     def __len__(self):
         return len(self.expr)
@@ -498,6 +509,27 @@ def as_formula(f, env=None):
     if isinstance(f, Call):
         return Formula(f, env)
     raise TypeError(f"cannot interpret {f!r} as a formula")
+
+
+def prune_env(env, expr):
+    """The picklable part of an evaluation environment: the entries that
+    ``expr`` refers to by name and that can be pickled.  (R serializes whole
+    environments; here an environment is usually the caller's globals(),
+    with modules and other unpicklable objects.)"""
+    import pickle
+    out = {}
+    try:
+        names = set(all_names(expr))
+        items = [(k, env[k]) for k in names if k in env]
+    except Exception:
+        return out
+    for k, v in items:
+        try:
+            pickle.dumps(v)
+        except Exception:
+            continue
+        out[k] = v
+    return out
 
 
 def all_names(e):

@@ -40,7 +40,7 @@ from .modular import Rho, mkdevfun, _rank_qr
 from .modules import merPredD, nlsResp
 from .optimizers import optwrap
 from .reformulas import (findbars_x, lme4_specials, mkReTrms, nobars, noSpecials, sub_specials)
-from .rlang import Call, Const, Formula, Sym, all_vars, as_formula, deparse, is_call, parse
+from .rlang import Call, Const, Formula, Sym, all_vars, as_formula, deparse, is_call, parse, prune_env
 from . import options
 
 __all__ = ["nlmer", "nlformula", "mkNlRespMod", "SSlogis", "SSasymp", "SSasympOff",
@@ -65,6 +65,15 @@ class NLValue(np.ndarray):
     def __array_finalize__(self, obj):
         self.gradient = getattr(obj, "gradient", None)
         self.gradient_names = getattr(obj, "gradient_names", None)
+
+    # ndarray pickling drops instance attributes
+    def __reduce__(self):
+        fn, args, state = super().__reduce__()
+        return fn, args, (state, self.gradient, self.gradient_names)
+
+    def __setstate__(self, st):
+        state, self.gradient, self.gradient_names = st
+        super().__setstate__(state)
 
 
 def _f(x):
@@ -263,6 +272,11 @@ class _NLModel:
         self.env = env
         self.pnames = list(pnames)
         self.data_cols = data_cols  # data dict for the bare-callable interface
+
+    def __getstate__(self):
+        st = dict(self.__dict__)
+        st["env"] = prune_env(self.env, self.nlmod)
+        return st
 
     def _resolve(self, name):
         if name in self.env and callable(self.env[name]):

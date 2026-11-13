@@ -127,7 +127,28 @@ PYBIND11_MODULE(_lme4cpp, m) {
         .def_property_readonly("Lind", &merPredD::Lind)
         .def_property_readonly("N", &merPredD::N)
         .def_property_readonly("p", &merPredD::p)
-        .def_property_readonly("q", &merPredD::q);
+        .def_property_readonly("q", &merPredD::q)
+        .def(py::pickle(
+            [](const merPredD& s) {
+                return py::make_tuple(s.X(), s.Zt(), s.Lambdat(), s.Lind(), s.theta(),
+                                      s.V().rows(), s.Xwts(), s.beta0(), s.u0(),
+                                      s.V(), s.VtV(), s.RZX(), s.Ut(), s.Utr(), s.Vtr(),
+                                      s.delb(), s.delu(), s.CcNumer(), s.ldL2(), s.ldRX2());
+            },
+            [](py::tuple t) {
+                if (t.size() != 20) throw std::runtime_error("merPredD: invalid pickle state");
+                merPredD* p = new merPredD(t[0].cast<MatrixXd>(), t[1].cast<SpMat>(),
+                                           t[2].cast<SpMat>(), t[3].cast<VectorXi>(),
+                                           t[4].cast<VectorXd>(), t[5].cast<Eigen::Index>(),
+                                           t[6].cast<VectorXd>(), t[7].cast<VectorXd>(),
+                                           t[8].cast<VectorXd>());
+                p->restoreState(t[9].cast<MatrixXd>(), t[10].cast<MatrixXd>(),
+                                t[11].cast<MatrixXd>(), t[12].cast<SpMat>(),
+                                t[13].cast<VectorXd>(), t[14].cast<VectorXd>(),
+                                t[15].cast<VectorXd>(), t[16].cast<VectorXd>(),
+                                t[17].cast<double>(), t[18].cast<double>(), t[19].cast<double>());
+                return p;
+            }));
 
     // ------------------------------------------------------------------ responses
     py::class_<lmResp>(m, "lmResp")
@@ -184,7 +205,17 @@ PYBIND11_MODULE(_lme4cpp, m) {
              })
         .def("theta", &glm::glmFamily::theta)
         .def("setTheta", &glm::glmFamily::setTheta)
-        .def("hasFreeDispersion", &glm::glmFamily::hasFreeDispersion);
+        .def("hasFreeDispersion", &glm::glmFamily::hasFreeDispersion)
+        .def(py::pickle(
+            [](const glm::glmFamily& f) {
+                bool nb = f.fam().substr(0, 18) == "Negative Binomial(";
+                return py::make_tuple(f.fam(), f.lnk(), nb ? f.theta() : NAN);
+            },
+            [](py::tuple t) {
+                if (t.size() != 3) throw std::runtime_error("glmFamily: invalid pickle state");
+                return new glm::glmFamily(t[0].cast<std::string>(), t[1].cast<std::string>(),
+                                          t[2].cast<double>());
+            }));
 
     py::class_<glmResp, lmResp>(m, "glmResp")
         .def(py::init([](const std::string& family, const std::string& link, double theta,

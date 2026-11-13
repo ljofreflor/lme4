@@ -307,6 +307,39 @@ namespace lme4 {
         }
     }
 
+    void merPredD::restoreState(const MatrixXd& V, const MatrixXd& VtV, const MatrixXd& RZX,
+                                const SpMatrixd& Ut, const VectorXd& Utr, const VectorXd& Vtr,
+                                const VectorXd& delb, const VectorXd& delu,
+                                Scalar CcNumer, Scalar ldL2, Scalar ldRX2) {
+        if (V.rows() != d_V.rows() || V.cols() != d_V.cols() || VtV.rows() != d_p ||
+            VtV.cols() != d_p || RZX.rows() != d_q || RZX.cols() != d_p ||
+            Ut.rows() != d_Ut.rows() || Ut.cols() != d_Ut.cols() ||
+            Ut.nonZeros() != d_Ut.nonZeros() || Utr.size() != d_q || Vtr.size() != d_p ||
+            delb.size() != d_p || delu.size() != d_q)
+            throw invalid_argument("restoreState: dimension mismatch");
+        d_V    = V;
+        d_VtV  = VtV;
+        // keep the (fixed) sparsity pattern of d_Ut; copy the values only
+        SpMatrixd Uc(Ut);
+        Uc.makeCompressed();
+        std::copy(Uc.valuePtr(), Uc.valuePtr() + Uc.nonZeros(), d_Ut.valuePtr());
+        d_Utr  = Utr;
+        d_Vtr  = Vtr;
+        d_delb = delb;
+        d_delu = delu;
+        updateL();                       // LamtUt and L at the stored Lambda, Ut
+        d_RZX  = RZX;
+        if (d_p > 0) {
+            MatrixXd      VtVdown(d_VtV);
+            VtVdown.selfadjointView<Eigen::Upper>().rankUpdate(d_RZX.adjoint(), -1);
+            MatrixXd full(VtVdown.selfadjointView<Eigen::Upper>());
+            d_RX.compute(full);
+        }
+        d_CcNumer = CcNumer;
+        d_ldL2    = ldL2;
+        d_ldRX2   = ldRX2;
+    }
+
     void merPredD::updateRes(const VectorXd& wtres) {
         if (d_V.rows() != wtres.size())
             throw invalid_argument("updateRes: dimension mismatch");

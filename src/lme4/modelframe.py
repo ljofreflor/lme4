@@ -250,6 +250,15 @@ class _Matrix(np.ndarray):
     def __array_finalize__(self, obj):
         self.colnames = getattr(obj, "colnames", None)
 
+    # ndarray pickling drops instance attributes
+    def __reduce__(self):
+        fn, args, state = super().__reduce__()
+        return fn, args, (state, self.colnames)
+
+    def __setstate__(self, st):
+        state, self.colnames = st
+        super().__setstate__(state)
+
 
 def _as_num(x):
     if isinstance(x, Factor):

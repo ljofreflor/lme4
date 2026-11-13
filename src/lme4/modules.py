@@ -36,6 +36,8 @@ class merPredD:
         return merPredD(None, None, None, None, None, _ptr=self.ptr.copy(), Xattrs=dict(self.Xattrs))
 
     def __getattr__(self, name):
+        if name == "ptr" or name.startswith("__"):
+            raise AttributeError(name)
         return getattr(self.ptr, name)
 
     @property
@@ -71,7 +73,25 @@ class CHMfactor:
 
 class _RespBase:
     def __getattr__(self, name):
+        if name == "ptr" or name.startswith("__"):
+            raise AttributeError(name)
         return getattr(self.ptr, name)
+
+    # pickling: the C++ object is rebuilt from its vectors (its constructor
+    # recomputes only wrss and the log prior weights from them)
+    _VECS = ("y", "weights", "offset", "mu", "sqrtXwt", "sqrtrwt", "wtres")
+
+    def __getstate__(self):
+        st = {k: v for k, v in self.__dict__.items() if k != "ptr"}
+        st["_cpp"] = {k: np.array(getattr(self.ptr, k), float) for k in self._VECS}
+        st["_cpp"].update(self._cpp_state())
+        return st
+
+    def __setstate__(self, st):
+        st = dict(st)
+        cs = st.pop("_cpp")
+        self.__dict__.update(st)
+        self.ptr = self._cpp_build(cs)
 
     @property
     def y(self):
@@ -133,6 +153,14 @@ class lmerResp(_RespBase):
     def copy(self):
         return lmerResp(_ptr=self.ptr.copy())
 
+    def _cpp_state(self):
+        return {"REML": int(self.ptr.REML)}
+
+    def _cpp_build(self, cs):
+        ptr = cpp.lmerResp(*(cs[k] for k in self._VECS))
+        ptr.REML = cs["REML"]
+        return ptr
+
     def objective(self, ldL2, ldRX2, sqrL, sigma_sq=None):
         return self.ptr.Laplace(ldL2, ldRX2, sqrL, sigma_sq)
 
@@ -166,6 +194,19 @@ class glmResp(_RespBase):
 
     def copy(self):
         return glmResp(family=self.family, _ptr=self.ptr.copy())
+
+    def _cpp_state(self):
+        fam = self.ptr.fam()
+        theta = float(self.ptr.theta()) if fam.startswith("Negative Binomial(") else float("nan")
+        return {"fam": fam, "link": self.ptr.link(), "theta": theta,
+                "eta": np.array(self.ptr.eta, float), "n": np.array(self.ptr.n, float),
+                "phi": float(self.ptr.phi())}
+
+    def _cpp_build(self, cs):
+        ptr = cpp.glmResp(cs["fam"], cs["link"], cs["theta"], *(cs[k] for k in self._VECS),
+                          cs["eta"], cs["n"])
+        ptr.setPhi(cs["phi"])
+        return ptr
 
     @property
     def eta(self):
@@ -209,3 +250,10 @@ class nlsResp(_RespBase):
 
     def copy(self):
         return nlsResp(model=self.model, pnames=self.pnames, _ptr=self.ptr.copy())
+
+    def _cpp_state(self):
+        return {"gamma": np.array(self.ptr.gamma, float)}
+
+    def _cpp_build(self, cs):
+        return cpp.nlsResp(*(cs[k] for k in self._VECS), cs["gamma"], self.model,
+                           len(self.pnames))

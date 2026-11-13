@@ -193,6 +193,15 @@ namespace lme4 {
 
         // solve(L, B, system=...) as used by the R code (Matrix::solve on a CHMfactor)
         MatrixXd      solveSystem(const MatrixXd& B, int sys) const;
+
+        // Pickling support (no R counterpart: R serializes the reference class
+        // fields and rebuilds the external pointer).  After construction from
+        // (X, Zt, Lambdat, Lind, theta, n, Xwts, beta0, u0), install the
+        // remaining state exactly; L and RX are refactorized from it.
+        void         restoreState(const MatrixXd& V, const MatrixXd& VtV, const MatrixXd& RZX,
+                                  const SpMatrixd& Ut, const VectorXd& Utr, const VectorXd& Vtr,
+                                  const VectorXd& delb, const VectorXd& delu,
+                                  Scalar CcNumer, Scalar ldL2, Scalar ldRX2);
     };
 }
 

@@ -183,6 +183,22 @@ In Python `|` and `&` bind less tightly than `+`: write `x + (a & b)` for R's `x
 
 Argument names use `_` where R uses `.` (`na_action`, `re_form`, `allow_new_levels`).
 
+### Saving fitted models
+
+Fitted models (and profiles) can be pickled, the equivalent of R's `saveRDS(m)`; the C++
+modules are restored to their exact state, so a reloaded model gives identical results and
+can be refitted, updated or simulated from:
+
+```python
+import pickle
+pickle.dump(fm1, open("fm1.pkl", "wb"))
+fm1 = pickle.load(open("fm1.pkl", "rb"))     # also joblib.dump / copy.deepcopy
+```
+
+As with R's formula environments, a model keeps the variables its formula refers to that
+are not in `data`; of the caller's namespace, only the picklable objects named in the
+formula are stored.
+
 ### Coverage
 
 Implemented: `lmer`, `glmer` (Laplace, `nAGQ = 0`, adaptive Gauss–Hermite quadrature),
